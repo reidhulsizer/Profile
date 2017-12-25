@@ -1,0 +1,370 @@
+#Reid Hulsizer
+#10/24/2017
+
+#1
+load data
+```{r}
+velo = read.csv("veloData.csv", header = TRUE)
+```
+Exploring 
+```{r}
+unique(velo$game_id)
+unique(velo$pitch_type)
+veloNULL = velo[which(velo$pitch_type == 'NULL'),]
+```
+Based on velocity Null is either slider or splitter
+```{r}
+veloFS = velo[which(velo$pitch_type == 'FS'),]
+veloSL = velo[which(velo$pitch_type == 'SL'),]
+a = mean(veloFS$initial_speed)
+aa = sd(veloFS$initial_speed)
+b = mean(veloSL$initial_speed)
+bb = sd(veloSL$initial_speed)
+c = 1199/(273+1199)
+```
+Bayes rule says Null most likely to be slider
+```{r}
+velo$pitch_type = replace(velo$pitch_type,velo$pitch_type=='NULL','SL')
+unique(velo$pitch_type)
+velo$pitch_name = replace(velo$pitch_name,velo$pitch_name=='NULL','Slider')
+unique(velo$pitch_name)
+```
+
+```{r}
+veloFF = velo[which(velo$pitch_type == 'FF'),]
+veloFT = velo[which(velo$pitch_type == 'FT'),]
+veloFS = velo[which(velo$pitch_type == 'FS'),]
+veloSL = velo[which(velo$pitch_type == 'SL'),]
+veloCU = velo[which(velo$pitch_type == 'CU'),]
+veloIN = velo[which(velo$pitch_type == 'IN'),]
+veloPO = velo[which(velo$pitch_type == 'PO'),]
+```
+
+```{r}
+plot(veloFF$pitch_of_game,veloFF$initial_speed)
+plot(veloFT$pitch_of_game,veloFT$initial_speed)
+plot(veloFS$pitch_of_game,veloFS$initial_speed)
+plot(veloSL$pitch_of_game,veloSL$initial_speed)
+plot(veloCU$pitch_of_game,veloCU$initial_speed)
+```
+Outlier in FT
+```{r}
+a = (mean(veloFT$initial_speed) - min(veloFT$initial_speed))/ sd(veloFT$initial_speed)
+min(veloFT$initial_speed)
+```
+5.6 SD's away. Assuming it is not FT, bayes rule again says more likely to be slider than splitter.
+```{r}
+velo$pitch_name[which(velo$pitch_type=="FT" & velo$initial_speed== 81.8)] = "Slider"
+velo$pitch_type[which(velo$pitch_type=="FT" & velo$initial_speed== 81.8)] = "SL"
+```
+subset data by pitch type
+```{r}
+veloFF = velo[which(velo$pitch_type == 'FF'),]
+veloFT = velo[which(velo$pitch_type == 'FT'),]
+veloFS = velo[which(velo$pitch_type == 'FS'),]
+veloSL = velo[which(velo$pitch_type == 'SL'),]
+veloCU = velo[which(velo$pitch_type == 'CU'),]
+veloIN = velo[which(velo$pitch_type == 'IN'),]
+veloPO = velo[which(velo$pitch_type == 'PO'),]
+```
+
+```{r}
+plot(veloFF$pitch_of_game,veloFF$initial_speed)
+plot(veloFT$pitch_of_game,veloFT$initial_speed)
+plot(veloFS$pitch_of_game,veloFS$initial_speed)
+plot(veloSL$pitch_of_game,veloSL$initial_speed)
+plot(veloCU$pitch_of_game,veloCU$initial_speed)
+plot(velo$pitch_of_game,velo$initial_speed)
+```
+SL
+```{r}
+velo$PSL[1:3792] = 0
+for (i in 1:3792){
+  for(j in 1:110){
+  if(velo$pitch_type[i] == 'SL' & velo$game_id[i] == velo$game_id[i+j] &
+    i+j < 3793 )
+    velo$PSL[i+j] = velo$PSL[i+j] + 1
+  }
+}
+```
+FF
+```{r}
+velo$PFF[1:3792] = 0
+for (i in 1:3792){
+  for(j in 1:110){
+  if(velo$pitch_type[i] == 'FF' & velo$game_id[i] == velo$game_id[i+j] &
+    i+j < 3793 )
+    velo$PFF[i+j] = velo$PFF[i+j] + 1
+  }
+}
+```
+FT
+```{r}
+velo$PFT[1:3792] = 0
+for (i in 1:3792){
+  for(j in 1:110){
+  if(velo$pitch_type[i] == 'FT' & velo$game_id[i] == velo$game_id[i+j] &
+    i+j < 3793 )
+    velo$PFT[i+j] = velo$PFT[i+j] + 1
+  }
+}
+```
+FS
+```{r}
+velo$PFS[1:3792] = 0
+for (i in 1:3792){
+  for(j in 1:110){
+  if(velo$pitch_type[i] == 'FS' & velo$game_id[i] == velo$game_id[i+j] &
+    i+j < 3793 )
+    velo$PFS[i+j] = velo$PFS[i+j] + 1
+  }
+}
+```
+CU
+```{r}
+velo$PCU[1:3792] = 0
+for (i in 1:3792){
+  for(j in 1:110){
+  if(velo$pitch_type[i] == 'CU' & velo$game_id[i] == velo$game_id[i+j] &
+    i+j < 3793 )
+    velo$PCU[i+j] = velo$PCU[i+j] + 1
+  }
+}
+```
+
+```{r}
+veloFF = velo[which(velo$pitch_type == 'FF'),]
+veloFT = velo[which(velo$pitch_type == 'FT'),]
+veloFS = velo[which(velo$pitch_type == 'FS'),]
+veloSL = velo[which(velo$pitch_type == 'SL'),]
+veloCU = velo[which(velo$pitch_type == 'CU'),]
+veloIN = velo[which(velo$pitch_type == 'IN'),]
+veloPO = velo[which(velo$pitch_type == 'PO'),]
+```
+Normalize the initial speed based on mean and SD for each pitch
+```{r}
+velo$Norm[1:3792] = 0
+for (i in 1:3792){
+  if(velo$pitch_type[i] == 'FF'){
+    velo$Norm[i] = ((velo$initial_speed[i] - mean(veloFF$initial_speed)) /
+       sd(veloFF$initial_speed))
+  }
+  else if(velo$pitch_type[i] == 'FT'){
+    velo$Norm[i] = ((velo$initial_speed[i] - mean(veloFT$initial_speed)) /
+       sd(veloFT$initial_speed))
+  }
+   else if(velo$pitch_type[i] == 'CU'){
+    velo$Norm[i] = ((velo$initial_speed[i] - mean(veloCU$initial_speed)) /
+       sd(veloCU$initial_speed))
+   }
+   else if(velo$pitch_type[i] == 'FS'){
+    velo$Norm[i] = ((velo$initial_speed[i] - mean(veloFS$initial_speed)) /
+       sd(veloFS$initial_speed))
+   }
+   else if(velo$pitch_type[i] == 'SL'){
+    velo$Norm[i] = ((velo$initial_speed[i] - mean(veloSL$initial_speed)) /
+       sd(veloSL$initial_speed))
+  }
+    else
+  velo$Norm[i] = 0
+}
+```
+Total Game Norm
+```{r}
+velo$TGN[1:3792] = 0
+for (i in 1:3792){
+  for(j in 1:110){
+  if(velo$game_id[i] == velo$game_id[i+j] &
+    i+j < 3793 )
+    velo$TGN[i+j] = velo$TGN[i+j] + velo$Norm[i]
+  }
+}
+```
+Total Game Norm Average
+```{r}
+velo$Previous_pitches = (velo$PCU+velo$PFF+velo$PFS+velo$PFT+velo$PSL)
+velo$TGNA = velo$TGN/(velo$PCU+velo$PFF+velo$PFS+velo$PFT+velo$PSL)
+velo$TGNA[is.na(velo$TGNA)] = 0
+```
+lag1 norm
+```{r}
+velo$L1N[1:3792] = 0
+for (i in 1:3792){
+  if(velo$game_id[i] == velo$game_id[i+1] &
+    i+1 < 3793 )
+    velo$L1N[i+1] = velo$Norm[i]
+}
+```
+lag2 norm
+```{r}
+velo$L2N[1:3792] = 0
+for (i in 1:3792){
+  if(velo$game_id[i] == velo$game_id[i+2] &
+    i+2 < 3793 )
+    velo$L2N[i+2] = velo$Norm[i]
+}
+```
+lag3 norm
+```{r}
+velo$L3N[1:3792] = 0
+for (i in 1:3792){
+  if(velo$game_id[i] == velo$game_id[i+3] &
+    i+3 < 3793 )
+    velo$L3N[i+3] = velo$Norm[i]
+}
+```
+lag 1 same norm
+```{r}
+velo$LSN[1:3792] = 0
+for (i in 1:3792){
+  for(j in 1:110){
+  if(velo$game_id[i] == velo$game_id[i+j] &
+     velo$pitch_type[i] == velo$pitch_type[i+j] &
+    i+j < 3793 )
+    velo$LSN[i+j] = velo$Norm[i]
+  }
+}
+```
+total same norm
+```{r}
+velo$TSN[1:3792] = 0
+for (i in 1:3792){
+  for(j in 1:110){
+  if(velo$game_id[i] == velo$game_id[i+j] &
+     velo$pitch_type[i] == velo$pitch_type[i+j] &
+    i+j < 3793 )
+    velo$TSN[i+j] = velo$Norm[i] + velo$TSN[i+j]
+  }
+}
+```
+subseting
+```{r}
+veloFF = velo[which(velo$pitch_type == 'FF'),]
+veloFT = velo[which(velo$pitch_type == 'FT'),]
+veloFS = velo[which(velo$pitch_type == 'FS'),]
+veloSL = velo[which(velo$pitch_type == 'SL'),]
+veloCU = velo[which(velo$pitch_type == 'CU'),]
+veloIN = velo[which(velo$pitch_type == 'IN'),]
+veloPO = velo[which(velo$pitch_type == 'PO'),]
+```
+
+Initial model
+```{r}
+m1.1 = lm(initial_speed~PSL+PFF+PFT+PFS+PCU+TGN+TGNA+L1N+L2N+L3N+LSN+TSN, data = veloFF)
+summary(m1.1)
+```
+creating interations for exponential relationships
+```{r}
+velo$pitch_of_game2 = (velo$pitch_of_game*velo$pitch_of_game)
+velo$PSL2 = (velo$PSL*velo$PSL)
+velo$PCU2 = (velo$PCU*velo$PCU)
+velo$PFF2 = (velo$PFF*velo$PFF)
+velo$PFT2 = (velo$PFT*velo$PFT)
+velo$PFS2 = (velo$PFS*velo$PFS)
+velo$pitch_of_game3 = (velo$pitch_of_game*velo$pitch_of_game2)
+velo$PSL3 = (velo$PSL*velo$PSL2)
+velo$PCU3 = (velo$PCU*velo$PCU2)
+velo$PFF3 = (velo$PFF*velo$PFF2)
+velo$PFT3 = (velo$PFT*velo$PFT2)
+velo$PFS3 = (velo$PFS*velo$PFS2)
+```
+updating subsets
+```{r}
+veloFF = velo[which(velo$pitch_type == 'FF'),]
+veloFT = velo[which(velo$pitch_type == 'FT'),]
+veloFS = velo[which(velo$pitch_type == 'FS'),]
+veloSL = velo[which(velo$pitch_type == 'SL'),]
+veloCU = velo[which(velo$pitch_type == 'CU'),]
+veloIN = velo[which(velo$pitch_type == 'IN'),]
+veloPO = velo[which(velo$pitch_type == 'PO'),]
+```
+model with interactions
+```{r}
+m1.2 = lm(initial_speed~PSL+PSL2+PSL3+PFF+PFF2+PFF3+PFT+PFT2+PFT3+PFS+PFS2+PFS3+PCU+PCU2+PCU3+TGNA+L1N+L2N+LSN+TSN, data = veloFF)
+summary(m1.2)
+```
+removing noisy varriables
+```{r}
+m1.3 = lm(initial_speed~PSL+PSL2+PSL3+PFF+PFF2+PFF3+PFT+PFT2+PFT3+PCU+PCU2+PCU3+TGNA+L1N+L2N+LSN+TSN, data = veloFF)
+summary(m1.3)
+```
+
+```{r}
+m1.4 = lm(initial_speed~PSL+PSL2+PSL3+PFF+PFF2+PFF3+PFT+PFT2+PFT3+pitch_of_game+pitch_of_game2+pitch_of_game3+TGNA+L1N+L2N+LSN+TSN, data = veloFF)
+summary(m1.4)
+```
+```{r}
+m1.5 = lm(initial_speed~PSL+PSL2+PSL3+PFF+PFF2+PFF3+PFT+PFT2+PFT3+TGNA+L1N+L2N+LSN+TSN, data = veloFF)
+summary(m1.5)
+```
+##Final Model 1
+```{r}
+FF_Final_Model = lm(initial_speed~PSL+PSL2+PSL3+PFF+PFF2+PFF3+PFT+PFT2+PFT3+TGNA+L1N+L2N+LSN+TSN, data = veloFF)
+summary(FF_Final_Model)
+```
+
+initial FT model
+```{r}
+m2.1 = lm(initial_speed~PSL+PFF+PFT+PFS+PCU+TGN+TGNA+L1N+L2N+L3N+LSN+TSN, data = veloFT)
+summary(m2.1)
+```
+generating more lags
+```{r}
+velo$L4N[1:3792] = 0
+for (i in 1:3792){
+  if(velo$game_id[i] == velo$game_id[i+4] &
+    i+4 < 3793 )
+    velo$L4N[i+4] = velo$Norm[i]
+}
+```
+
+```{r}
+velo$L5N[1:3792] = 0
+for (i in 1:3792){
+  if(velo$game_id[i] == velo$game_id[i+5] &
+    i+5 < 3793 )
+    velo$L5N[i+5] = velo$Norm[i]
+}
+```
+updating subsets
+```{r}
+veloFF = velo[which(velo$pitch_type == 'FF'),]
+veloFT = velo[which(velo$pitch_type == 'FT'),]
+veloFS = velo[which(velo$pitch_type == 'FS'),]
+veloSL = velo[which(velo$pitch_type == 'SL'),]
+veloCU = velo[which(velo$pitch_type == 'CU'),]
+veloIN = velo[which(velo$pitch_type == 'IN'),]
+veloPO = velo[which(velo$pitch_type == 'PO'),]
+```
+
+```{r}
+m2.2 = lm(initial_speed~PSL+PSL2+PSL3+PFF+PFF2+PFF3+PFT+PFT2+PFT3+PFS+PFS2+PFS3+PCU+PCU2+PCU3+TGNA+L1N+L2N+L3N+L4N+L5N+LSN+TSN, data = veloFT)
+summary(m2.2)
+```
+removed cureballs and fastballs becasue of poor coefiicient interpritability and high p-values.
+```{r}
+m2.3 = lm(initial_speed~PSL+PSL2+PSL3+PFT+PFT2+PFT3+TGNA+L1N+L2N+L3N+L4N+L5N+TSN, data = veloFT)
+summary(m2.3)
+```
+adding pitch of the game
+```{r}
+m2.4 = lm(initial_speed~PFT+PFT2+PFT3+pitch_of_game+pitch_of_game2+pitch_of_game3+TGNA+L1N+L2N+L3N+L4N+L5N+TSN, data = veloFT)
+summary(m2.4)
+```
+variable selection
+```{r}
+m2.4 = lm(initial_speed~PFT+PFT2+PFT3+pitch_of_game+pitch_of_game2+pitch_of_game3+TGNA+L1N+L2N+L3N+L4N+L5N+TSN, data = veloFT)
+summary(m2.4)
+```
+##Final Model 2
+```{r}
+FT_Final_Model = lm(initial_speed~PFT+PFT2+PFT3+TGNA+L1N+L2N+L3N+L4N+L5N+TSN, data = veloFT)
+summary(FT_Final_Model)
+```
+```{r}
+mean(veloFF$initial_speed)
+mean(veloFT$initial_speed)
+mean(veloFS$initial_speed)
+mean(veloCU$initial_speed)
+mean(veloSL$initial_speed)
+```
