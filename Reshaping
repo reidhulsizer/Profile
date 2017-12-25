@@ -1,0 +1,152 @@
+Response = read.csv("ShoeDazzle_Response.csv", header=TRUE)
+Stimulation = read.csv("ShoeDazzle_Stimulation.csv", header=TRUE)
+Stimulation$Date.Location <- as.character(paste(Stimulation$Date, Stimulation$Geography, sep = "."))
+Response$Date.Location <- as.character(paste(Response$Date, Response$Geography, sep = "."))
+MarketingSpend1 = as.data.frame(unique(Response$Date.Location))
+colnames(MarketingSpend1) <- c("Date.Location")
+Activations = aggregate(Response$VIP.Activations, by=list(Date.Location = Response$Date.Location), FUN=sum)
+MarketingSpend1 <- merge(Activations,MarketingSpend1,by="Date.Location")
+colnames(MarketingSpend1) <- c("Date.Location","Activations")
+
+Stimulation$Unique <- as.character(paste(Stimulation$Geography, Stimulation$Channel, Stimulation$Sub.Channel, sep = "."))
+Stimulation$Unique2 <- as.character(paste(Stimulation$Channel, Stimulation$Sub.Channel, sep = "."))
+x = unique(Stimulation$Unique)
+x = as.list(x)
+res <- do.call(rbind.data.frame, x)
+x = unique(Stimulation$Unique)
+x = as.list(x)
+res <- do.call(rbind.data.frame, x)
+library(reshape2)
+Stimulationwide = dcast(Stimulation, Date.Location ~ Unique2, value.var = "Marketing.Spend")
+MarketingSpend2 = dcast(Stimulation, Date ~ Unique, value.var = "Marketing.Spend")
+Stimulationwide$Geography = gsub(pattern = ".+[0-9].",replacement = "",x= Stimulationwide$Date.Location)
+Stimulationwide$Date = gsub(pattern = ".[A-Z].+",replacement = "",x=Stimulationwide$Date.Location)
+Activations2 = aggregate(Response$VIP.Activations, by=list(Date = Response$Date), FUN=sum)
+MarketingSpend2$Activations = Activations2$x
+
+
+Activations = aggregate(Response$VIP.Activations, by=list(Date.Location = Response$Date.Location), FUN=sum)
+
+MarketingSpend1 = merge(Activations,Stimulationwide,by="Date.Location", all=TRUE)
+MarketingSpend1[is.na(MarketingSpend1)] = 0
+MarketingSpend2[is.na(MarketingSpend2)] = 0
+colnames(MarketingSpend1)[2] = "Activations"
+write.csv(MarketingSpend1, "TechstyleMspend.csv")
+write.csv(MarketingSpend2, "TechstyleGranularMspend.csv")
+
+
+Response = read.csv("ShoeDazzle_Response.csv", header=TRUE)
+Stimulation = read.csv("ShoeDazzle_Stimulation.csv", header=TRUE)
+Stimulation$Date.Location <- as.character(paste(Stimulation$Date, Stimulation$Geography, sep = "."))
+Response$Date.Location <- as.character(paste(Response$Date, Response$Geography, sep = "."))
+Impressions1 = as.data.frame(unique(Response$Date.Location))
+colnames(Impressions1) <- c("Date.Location")
+Activations = aggregate(Response$VIP.Activations, by=list(Date.Location = Response$Date.Location), FUN=sum)
+Impressions1 <- merge(Activations,Impressions1,by="Date.Location")
+colnames(Impressions1) <- c("Date.Location","Activations")
+
+Stimulation$Unique <- as.character(paste(Stimulation$Geography, Stimulation$Channel, Stimulation$Sub.Channel, sep = "."))
+Stimulation$Unique2 <- as.character(paste(Stimulation$Channel, Stimulation$Sub.Channel, sep = "."))
+x = unique(Stimulation$Unique)
+x = as.list(x)
+res <- do.call(rbind.data.frame, x)
+x = unique(Stimulation$Unique)
+x = as.list(x)
+res <- do.call(rbind.data.frame, x)
+library(reshape2)
+Stimulationwide = dcast(Stimulation, Date.Location ~ Unique2, value.var = "Impressions")
+Impressions2 = dcast(Stimulation, Date ~ Unique, value.var = "Impressions")
+Stimulationwide$Geography = gsub(pattern = ".+[0-9].",replacement = "",x= Stimulationwide$Date.Location)
+Stimulationwide$Date = gsub(pattern = ".[A-Z].+",replacement = "",x=Stimulationwide$Date.Location)
+Activations2 = aggregate(Response$VIP.Activations, by=list(Date = Response$Date), FUN=sum)
+Impressions2$Activations = Activations2$x
+
+
+Activations = aggregate(Response$VIP.Activations, by=list(Date.Location = Response$Date.Location), FUN=sum)
+
+Impressions1 = merge(Activations,Stimulationwide,by="Date.Location", all=TRUE)
+Impressions1[is.na(Impressions1)] = 0
+Impressions2[is.na(Impressions2)] = 0
+colnames(Impressions1)[2] = "Activations"
+write.csv(Impressions1, "TechstyleMspend.csv")
+write.csv(Impressions2, "TechstyleGranularMspend.csv")
+
+colnames(Impressions1)[3:8] = make.names(paste("Impressions.",colnames(Impressions1)[3:8],sep=""))
+colnames(MarketingSpend1)[3:8] = make.names(paste("MarketingSpend.",colnames(MarketingSpend1)[3:8],sep=""))
+
+Total = merge(Impressions1,MarketingSpend1, by="Date.Location")
+Total <- Total[ ,-c(1, 9:11) ]
+
+Atlanta = Total[which(MarketingSpend1$Geography == "ATLANTA"),]
+Boston = Total[which(MarketingSpend1$Geography == "BOSTON-MANCHESTER"),]
+Chicago = Total[which(MarketingSpend1$Geography == "CHICAGO"),]
+Dallas = Total[which(MarketingSpend1$Geography == "DALLAS-FT. WORTH"),]
+Denver = Total[which(MarketingSpend1$Geography == "DENVER"),]
+Detroit = Total[which(MarketingSpend1$Geography == "DETROIT"),]
+Houston = Total[which(MarketingSpend1$Geography == "HOUSTON"),]
+LosAngeles = Total[which(MarketingSpend1$Geography == "LOS ANGELES"),]
+Miami = Total[which(MarketingSpend1$Geography == "MIAMI-FT. LAUDERDALE"),]
+NewYork = Total[which(MarketingSpend1$Geography == "NEW YORK"),]
+Other = Total[which(MarketingSpend1$Geography == "OTHER"),]
+Philadelphia = Total[which(MarketingSpend1$Geography == "PHILADELPHIA"),]
+EastNorthCentral = Total[which(MarketingSpend1$Geography == "REST OF EAST NORTH CENTRAL"),]
+EastSouthCentral = Total[which(MarketingSpend1$Geography == "REST OF EAST SOUTH CENTRAL"),]
+Mountain = Total[which(MarketingSpend1$Geography == "REST OF MOUNTAIN"),]
+Pacific = Total[which(MarketingSpend1$Geography == "REST OF PACIFIC"),]
+SouthAtlantic = Total[which(MarketingSpend1$Geography == "REST OF SOUTH ATLANTIC"),]
+WestNorthCentral = Total[which(MarketingSpend1$Geography == "REST OF WEST NORTH CENTRAL"),]
+WestSouthCentral = Total[which(MarketingSpend1$Geography == "REST OF WEST SOUTH CENTRAL"),]
+SanFrancisco = Total[which(MarketingSpend1$Geography == "SAN FRANCISCO-OAK-SAN JOSE"),]
+Unknown = Total[which(MarketingSpend1$Geography == "UNKNOWN"),]
+WashingtonDC = Total[which(MarketingSpend1$Geography == "WASHINGTON DC"),]
+
+
+nlsLM((Activations.x ~ a + Impressions.Paid.Social.Facebook*b   + c*Impressions.Paid.Social.Facebook^d) , 
+       data = Atlanta , start = c(a=0, b=1, c=1, d=1),
+       lower = c(a=0, b=0, c=0, d=0), upper = c(a=2, b=2, c=2, d=2))
+
+
+atlantaM <- nls(Activations.x ~ a + Impressions.Paid.Social.Facebook*b   + c*Impressions.Paid.Social.Facebook^d, 
+             data = Atlanta, 
+             start = list(a=0, b=1, c=1, d=1))
+
+
+
+model.0 <- lm(Activations.x ~ Impressions.Paid.Search.Branded + Impressions.Paid.Search.Non.Branded + Impressions.Paid.Social.Facebook + Impressions.Television.Television, data=Atlanta)
+summary(model.0)
+
+WashingtonDC$Date.y = as.Date(WashingtonDC$Date.y)
+WashingtonDC$Month = month.name[as.numeric(format(WashingtonDC$Date.y,"%m"))]
+
+WashingtonDC$OD.full = WashingtonDC$MarketingSpend.Online.Display.Content+WashingtonDC$Impressions.Online.Display.Prospecting
+
+arima.xreg = log(WashingtonDC[1:101,c("MarketingSpend.Paid.Social.Facebook","OD.full")])
+arima.xreg$Month = WashingtonDC$Month[1:101]
+old.col = ncol(arima.xreg)-1
+for(i in 2:12){ 
+  arima.xreg[,old.col+i] = as.numeric(arima.xreg$Month==month.name[i])
+  colnames(arima.xreg)[old.col+i] = month.name[i]
+}
+arima.xreg = arima.xreg[,-which(colnames(arima.xreg)=="Month")]
+WashingtonModel = auto.arima(log(WashingtonDC$Activations.x[1:101]),xreg = arima.xreg)
+
+plot(WashingtonModel$x)
+lines(WashingtonModel$fitted,col="red")
+sig.coefs = coeftest(WashingtonModel)
+siggers = which(sig.coefs[-1,4]<.05)
+
+xreg.update = arima.xreg[,siggers]
+dc.upped = auto.arima(log(WashingtonDC$Activations.x[1:101]),xreg=xreg.update)
+coeftest(dc.upped)
+
+coef(model.0)[2]
+fitAtlanta = nls(Activations.x ~ function(Impressions.Paid.Search.Branded, Impressions.Paid.Search.Non.Branded, Impressions.Paid.Social.Facebook, Impressions.Television.Television) data=Atlanta, start=c(Activations.x = 0, Impressions.Online.Display.Prospecting=0,Impressions.Paid.Search.Branded=0, Impressions.Paid.Search.Non.Branded=0,Impressions.Paid.Social.Facebook=0,Impressions.Television.Television=0))
+model <- nls(Activations.x ~ a + Impressions.Paid.Social.Facebook*b   + c*Impressions.Paid.Social.Facebook^d, 
+             data = Atlanta, 
+             start = list(a=0, b=1, c=1, d=1))
+
+Chick.1 <- Atlanta[Atlanta$Activations.x == 1, ]
+fm1DNase1 <- nls(Activations.x ~ SSlogis(log(Impressions.Paid.Search.Branded), 0.000488281 , 0.000488281 , 0.000488281 ), Atlanta)
+
+fitAtlanta = nls(Atlanta$Activations.x ~ Atlanta$Impressions.Paid.Social.Facebook, Atlanta$Impressions.Paid.Social.Facebook*Atlanta$Impressions.Paid.Social.Facebook, data = Atlanta, start = list(Impressions.Paid.Social.Facebook = 0.0004126264))
+a = as.data.frame(unique(Total$Geography.y))
