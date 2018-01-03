@@ -1,0 +1,71 @@
+---
+title: "Prediction Interval Creation Example"
+author: "Reid Hulsizer"
+date: "5/18/2017"
+output: html_document
+---
+
+```{r}
+y = readLines('http://www.metoffice.gov.uk/hadobs/hadcrut4/data/current/time_series/HadCRUT.4.5.0.0.annual_ns_avg.txt')
+datalines = grep('   ', y[1:167],value=TRUE)
+temperature <- read.table(textConnection(datalines))
+drops = c("V3","V4","V5","V6","V7","V8","V9","V10","V11","V12")
+temperature = temperature[ , !(names(temperature) %in% drops)]
+names(temperature) = c('YEAR','Temperature')
+
+x = readLines('ftp://ftp.ncdc.noaa.gov/pub/data/paleo/icecore/antarctica/law/law_co2.txt')
+data = grep('                 ', x[296:424],value=TRUE)
+D1 <- read.table(textConnection(data))
+names(D1) = c('YEAR','Co2')
+
+z = readLines('ftp://aftp.cmdl.noaa.gov/products/trends/co2/co2_annmean_mlo.txt')
+data2 = grep('   ', z[58:115],value=TRUE)
+D2 <- read.table(textConnection(data2))
+D2 = D2[ , !(names(D2) %in% 'V3')]
+names(D2) = c('YEAR','Co2')
+
+avg = as.data.frame(cbind(D1$YEAR[110:129],D1$Co2[110:129],D2$Co2[1:20]))
+avg$Co2 = (avg$V2 + avg$V3)/2
+avg = avg[ , !(names(avg) %in% 'V3')]
+avg = avg[ , !(names(avg) %in% 'V2')]
+names(avg) = c('YEAR','Co2')
+
+D1 = D1[-c(110:129), ]
+D2 = D2[-c(1:20), ]
+
+carbon = rbind(D1,avg,D2)
+
+train = as.data.frame(cbind(temperature$YEAR[1:124],temperature$Temperature[1:124],carbon$Co2[1:124]))
+names(train) = c('YEAR','Temperature','Co2')
+
+test = as.data.frame(cbind(temperature$YEAR[125:167],temperature$Temperature[125:167],carbon$Co2[125:167]))
+names(test) = c('YEAR','Temperature','Co2')
+
+total = as.data.frame(rbind(train,test))
+
+fit = lm(Temperature ~ Co2, data=train)
+summary(fit)
+
+fit2 = lm(Temperature ~ Co2, data=train, weights = (train$Co2)^3)
+summary(fit)
+
+confidence.int = predict(fit, total, interval = c("confidence"), level = .95)
+
+confidence.int.cb = predict(fit2, total, interval = c("confidence"), level = .95, weights = (total$Co2)^3)
+
+predicted.int = predict(fit, total, interval = c("prediction"), level = .95)
+
+predicted.int.cb = predict(fit2, total, interval = c("prediction"), level = .95, weights = (total$Co2)^3)
+
+library(knitr)
+
+kable(cbind(total, predicted.int, confidence.int))
+
+#39 of the 42 years the prediction interval contained the observed value
+
+pit = pnorm(predict(fit, test, interval = c("confidence"), level = .95, type = c("response")))
+  
+hist(pit)
+hist(predicted.int)
+```
+

@@ -1,0 +1,153 @@
+---
+title: "Bayes Example"
+author: "Reid Hulsizer"
+date: "4/27/2017"
+output: html_document
+---
+
+
+```{r}
+data = read.csv("Warmup (1).csv")
+library(fitdistrplus)
+#Q1
+#mean from data
+obsx1 = mean(data[,1])
+#safe level of aresenic
+safe1 = 0.01
+# alpha for regection region
+alpha1 = .01
+# given log mean from dist
+mu1 = -4.98
+#given log sd from dist
+sd1 = 0.95
+# *varriable trying to minimize by 10's to get ratio for H1:Ho=16
+n =150
+#se of xbar1
+sdx1  = .14/sqrt(n)
+#inverse log normal of given dist
+theta1 = qlnorm(runif(20000), mu1, sd1)
+#inverse log normal to get sample 
+xbar1 = qnorm(runif(20000), theta1, sdx1)
+#rejection region given 1% significance and 
+(rejectionrregionx = qnorm(1-alpha1, safe1, sdx1))
+#number of xbar's above the rejection region
+(xcount = as.numeric(length(which(xbar1>rejectionrregionx))))
+#number of thetas in Ho region
+(A1 = as.numeric(length(which(theta1<safe1))))
+# of theta's in H1 region
+(C1 = 20000 - A1)
+#probability of Type 1 error
+(probT1E = xcount/C1)
+#odds of correct to incorrect labeing observations in rejection region
+(prerejectionrregion = probT1E/alpha1)
+
+# n needs to equal 150 to satisfy the requirement that the pre-esperimental rejection ratio of H1 to Ho be at least 16.
+
+
+#Q2
+
+fish = data[,2]
+#mean of data
+obs_mean = mean(fish)
+#plot of data
+plot(fish)
+#summary of data
+summary(fish) 
+#Safe level in fish
+safe2 = .09
+
+#mean for log distribution
+mulog2 = -2.12
+#sd for log distribution
+sdlog2 = 1.34
+#mean for normal distribution
+(mean2 = exp(mulog2+sdlog2^2/2))
+#sd for normal distribution
+(stdev2 = (exp(sdlog2^2)-1)^.5*mean2)
+# random logarithmic normal data generation
+theta2 = qlnorm(runif(20000), mulog2, sdlog2) 
+f2 = fitdist(theta2, "lnorm")
+plot(f2)
+summary(f2)
+
+A2 = as.numeric(length(which(theta2<=safe2)))
+# prior probability given Ho
+(p_ho = A2/20000)
+# prior probability given alternative
+(p_h1 = 1 - p_ho)
+# prior odds
+(p_odds = p_h1/p_ho)
+# 1.38 prior odds
+
+# Interval for xbar
+epsilon = .1
+int = c(obs_mean*(1-epsilon), obs_mean*(1+epsilon))
+
+# distribution of xbar
+sdx2 = .028/sqrt(30)
+xbar2 = rnorm(runif(20000), theta2, sdx2)
+#observations that are below interval
+low = which(xbar2<int[1])
+#observations that are above interval
+high = which(xbar2>int[2])
+#dataframe for theta and xbar obs
+df = cbind(theta2, xbar2 )
+#removing observations outside of the interval
+df = df[-c(high,low),]
+#theta values inside interval
+theta_data = df[,1] 
+# Ho & data
+(B = as.numeric(length(which(theta_data<=safe2))))
+# H1
+C = 20000 - A2 
+# H1 & data
+(D = as.numeric(length(theta_data)-B))
+# probability of data given Ho
+(p_data_ho = B/A2)
+# probability of data given H1
+(p_data_h1 = D/C)
+# Bayes Factor
+(bf = p_data_h1/p_data_ho)
+# posterior odds
+(post_odds = p_odds*bf)
+# posterior probability of H1 given data
+(p_post = post_odds/(1+post_odds))
+#Bayes Factor of zero leads to the conclusion that the null hypothesis is ture 
+#Q3(a)
+theta3 = c(rep(0,10000),rnorm(10000,0,1))
+xbar3 = qnorm(runif(20000),theta3,0.5)
+tstat3 = xbar3/0.5
+pscore0.5 = which(tstat3>=1.63 & tstat3<=1.67)
+(ps0.5 = length(pscore0.5))
+# % w/ and w/o negligible effect
+noeffect = length(which(theta3[pscore0.5]==0))
+effect = length(which(theta3[pscore0.5]!=0))
+#negligible effect
+noeffect/ps0.5
+#nonnegligible effect
+effect/ps0.5
+#With propabilities near 50% we can say that p-values near .05 give us little indication as to whether or not to reject Ho
+#Q3(b)
+H0rejectionregion = which(tstat3>1.65 & theta3==0)
+H1rejectionregion = which(tstat3>1.65 & theta3!=0)
+(odds_rej_H1toH0 = length(H1rejectionregion) / length(H0rejectionregion))
+# the prior odds of H1 to Ho
+Op = 0.5
+# pre-experimental rejection ratio of H1 to H0
+(Opre = odds_rej_H1toH0 * Op)
+#Q4
+#vector indicating if t statistic is in interval from Q3
+tstat3int = (tstat3>=1.63 & tstat3<=1.67) 
+#2nd xbar from Q3
+xbar4 = rnorm(20000, theta3, .5) 
+#t statistic for new xbar
+tstat4 = xbar4/.5 
+#Vector indicating if 2nd xbar is above 1.65
+thigh = (tstat4>=1.65) 
+#vector indicating if correspoding xbar's both produced significant p-values
+tboth = (tstat3int==T & thigh==T)  
+#ratio for initial significant xbar's to both producing significant p-values
+(h1_t = sum(tboth)/sum(tstat3int))
+#We can conclude that only 29% of the time under perfect conditions t-statistics near .05 significance, when the experiment is replicated will have a p-value that is signifant at a .05 threshold
+```
+
