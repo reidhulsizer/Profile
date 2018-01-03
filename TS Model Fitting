@@ -1,8 +1,8 @@
+#Copeied and Pasted due to licensing
+
 library(astsa)
 library(knitr)
 library(tseries)
-x = read.csv("final01.csv", header=TRUE)
-y = read.csv("final02.csv", header=TRUE)
 plot(ts(y$X.0.1964947))
 plot(ts(x$X0.2410655))
 x = diff(log(x$X0.2410655))
