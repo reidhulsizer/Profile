@@ -1,0 +1,298 @@
+---
+title: "Hotel Simulation"
+author: "Reid Hulsizer"
+date: "6/1/2017"
+output: html_document
+---
+
+```{r}
+#Hotel Economics 
+library(knitr)
+#Imputs - Demand, Price and Discount Rate's
+AvgDemand = c(300000, 600000, 900000)
+HighDemand = AvgDemand * 1.5
+LowDemand = AvgDemand * .5
+price = 2000
+costA = 1280
+costB = 1500
+DiscountRateA = .09
+DiscountRateB = .08
+
+tempDF = cbind.data.frame("Demand" = integer(4),"Capacity" = integer(4), "FixedCost" = integer(4), "VariableCost" = integer(4), "Revenue" = integer(4), "Profit" = integer(4), "DiscountFactor" = integer(4), "NPV" = integer(4))
+
+row.names(tempDF) = c("Year.0", "Year.1", "Year.2", "Year.3")
+
+#No uncertainty
+#planA
+planA = tempDF
+planA$Demand = c(0, AvgDemand)
+planA$Capacity = c(0, 900000, 900000, 900000)
+planA$FixedCost = c(900000000, 0, 0, 0)
+planA$VariableCost = pmin(planA$Capacity, planA$Demand) * costA
+planA$Revenue = pmin(planA$Capacity, planA$Demand) * price
+planA$Profit = planA$Revenue - planA$VariableCost - planA$FixedCost
+planA$DiscountFactor = c(1, 1/(1+DiscountRateA), 1/(1+DiscountRateA)^2, 1/(1+DiscountRateA)^3)
+planA$NPV = planA$Profit * planA$DiscountFactor
+kable(planA)
+sum(planA$NPV)
+#NPV with average demand for planA is $162,145,790
+
+#Plan B
+planB = tempDF
+planB$Demand = c(0, AvgDemand)
+planB$Capacity = c(0, 300000, 300000*2, 300000*3)
+planB$FixedCost = c(300000000, 300000000, 300000000, 0)
+planB$VariableCost = pmin(planB$Capacity, planB$Demand) * costB
+planB$Revenue = pmin(planB$Capacity, planB$Demand) * price
+planB$Profit = planB$Revenue - planB$VariableCost - planB$FixedCost
+planB$Profit = planB$Profit + c(0,0,0,300000000)
+planB$DiscountFactor = c(1, 1/(1+DiscountRateB), 1/(1+DiscountRateB)^2, 1/(1+DiscountRateB)^3)
+planB$NPV = planB$Profit * planB$DiscountFactor
+kable(planB)
+sum(planB$NPV)
+
+#NPV with average demand for planB is $156,485,292
+
+#NPV for planA is greater so planA is prefered for average demand 
+
+
+simulation = data.frame()
+
+set.seed(544)
+
+for (i in 1:10000){
+RandomDemand = c(runif(1, min = LowDemand[1], max = HighDemand[1]),
+runif(1, min = LowDemand[2], max = HighDemand[2]),
+runif(1, min = LowDemand[3], max = HighDemand[3]))
+planA = tempDF
+planA$Demand = c(0, RandomDemand)
+planA$Capacity = c(0, 900000, 900000, 900000)
+planA$FixedCost = c(900000000, 0, 0, 0)
+planA$VariableCost = pmin(planA$Capacity, planA$Demand) * costA
+planA$Revenue = pmin(planA$Capacity, planA$Demand) * price
+planA$Profit = planA$Revenue - planA$VariableCost - planA$FixedCost
+planA$DiscountFactor = c(1, 1/(1+DiscountRateA), 1/(1+DiscountRateA)^2, 1/(1+DiscountRateA)^3)
+planA$NPV = planA$Profit * planA$DiscountFactor
+planB = tempDF
+planB$Demand = c(0, RandomDemand)
+planB$Capacity = c(0, 300000, 300000*2, 300000*3)
+planB$FixedCost = c(300000000, 300000000, 300000000, 0)
+planB$VariableCost = pmin(planB$Capacity, planB$Demand) * costB
+planB$Revenue = pmin(planB$Capacity, planB$Demand) * price
+planB$Profit = planB$Revenue - planB$VariableCost - planB$FixedCost
+planB$Profit = planB$Profit + c(0,0,0,300000000)
+planB$DiscountFactor = c(1, 1/(1+DiscountRateB), 1/(1+DiscountRateB)^2, 1/(1+DiscountRateB)^3)
+planB$NPV = planB$Profit * planB$DiscountFactor
+simulation = rbind(simulation,
+cbind(NPVA = sum(planA$NPV),
+NPVB = sum(planB$NPV)))
+}
+
+saveRDS(simulation, "simulation.RDS")
+simulation = readRDS("simulation.RDS")
+par(mar = c(5,5,2,5))
+h = hist(simulation$NPVA, main = "NPV of Plan A", breaks = 100)
+par(new = T)
+ec = ecdf(simulation$NPVA)
+plot(x = h$mids, y=ec(h$mids)*max(h$counts),
+     col = rgb(0,0,0,alpha=0), axes=F, xlab=NA, ylab=NA)
+lines(x = h$mids, y=ec(h$mids)*max(h$counts), col ='red')
+
+
+par(mar = c(5,5,2,5))
+h = hist(simulation$NPVB, main = "PlanB NPV", breaks = 100)
+par(new = T)
+ec = ecdf(simulation$NPVB)
+plot(x = h$mids, y=ec(h$mids)*max(h$counts),
+     col = rgb(0,0,0,alpha=0), axes=F, xlab=NA, ylab=NA)
+lines(x = h$mids, y=ec(h$mids)*max(h$counts), col ='red')
+
+
+
+reqPerc = c(.01,.05,.1,.25,.50,.75,.90,.95,.99)
+kable(
+  cbind.data.frame(
+    "PlanA" = rbind("Max" = max(simulation$NPVA),
+                    "Min" = min(simulation$NPVA),
+                    "Expected" = mean(simulation$NPVA),
+                    cbind.data.frame("PlanA" = quantile(simulation$NPVA, reqPerc))
+    ),
+    "PlanB" = rbind("Max" = max(simulation$NPVB), "Min" = min(simulation$NPVB),  "Expected" = mean(simulation$NPVB),
+ cbind.data.frame("PlanB" = quantile(simulation$NPVB, reqPerc)))))
+
+kable(
+  cbind.data.frame(
+    "PlanA" = rbind("Probability of Loss" = mean(simulation$NPVA < 0) ), "PlanB" = rbind("Probability of Loss" = mean(simulation$NPVB < 0)  ) ))
+
+#Although Plan B has a lower probability of loss, Plan A has a higher expected value and since we are working under the assumption of risk neutrality, Plan A is preferred
+
+
+simulationC = c()
+
+set.seed(544)
+
+for (i in 1:10000){
+
+RandomDemand = c(runif(1, min = LowDemand[1], max = HighDemand[1]),
+runif(1, min = LowDemand[2], max = HighDemand[2]),
+runif(1, min = LowDemand[3], max = HighDemand[3]))
+
+planC = tempDF
+planC$Demand = c(0, RandomDemand)
+
+Plants = c(0,1)
+Plants[3] = ifelse(planC$Demand[2] < (Plants[2] * 300000),Plants[2],
+Plants[2] + 1)
+
+Plants[4] = ifelse(planC$Demand[3] < (Plants[3] * 300000),
+Plants[3],
+Plants[3] + 1)
+
+planC$Capacity = Plants*300000
+planC$FixedCost = c(300000000*diff(Plants), 0)
+planC$VariableCost = pmin(planC$Capacity, planC$Demand) * costB
+planC$Revenue = pmin(planC$Capacity, planC$Demand) * price
+planC$Profit = planC$Revenue - planC$VariableCost - planC$FixedCost
+if (Plants[4] > Plants[3]){
+planC$Profit = planC$Profit + c(0,0,0,300000000)
+}
+
+planC$DiscountFactor = c(1, 1/(1+DiscountRateB), 1/(1+DiscountRateB)^2, 1/(1+DiscountRateB)^3)
+planC$NPV = planC$Profit * planC$DiscountFactor
+
+
+simulationC = c(simulationC, NPVC = sum(planC$NPV))
+}
+saveRDS(simulationC, "simulationC.RDS")
+simulationC = readRDS("simulationC.RDS")
+par(mar = c(5,5,2,5))
+h = hist(simulationC, main = "NPV of Plan C", breaks = 100)
+par(new = T)
+ec = ecdf(simulationC)
+plot(x = h$mids, y=ec(h$mids)*max(h$counts),
+     col = rgb(0,0,0,alpha=0), axes=F, xlab=NA, ylab=NA)
+lines(x = h$mids, y=ec(h$mids)*max(h$counts), col ='red')
+
+
+
+
+reqPerc = c(.01,.05,.1,.25,.50,.75,.90,.95,.99)
+kable(
+  cbind.data.frame(
+    "PlanA" = rbind("Max" = max(simulation$NPVA), "Min" = min(simulation$NPVA),  "Expected" = mean(simulation$NPVA),
+                    cbind.data.frame("PlanA" = quantile(simulation$NPVA, reqPerc))
+    ),"PlanB" = rbind("Max" = max(simulation$NPVB),"Min" = min(simulation$NPVB),"Expected" = mean(simulation$NPVB), cbind.data.frame("PlanB" = quantile(simulation$NPVB, reqPerc))
+    ),
+    "PlanC" = rbind("Max" = max(simulationC),"Min" = min(simulationC), "Expected" = mean(simulationC),cbind.data.frame("PlanC" = quantile(simulationC, reqPerc)))))
+
+kable(
+  cbind.data.frame(
+    "PlanA" = rbind("Probability of Loss" = mean(simulation$NPVA < 0)),
+    "PlanB" = rbind("Probability of Loss" = mean(simulation$NPVB < 0)),
+    "PlanC" = rbind("Probability of Loss" = mean(simulationC < 0)) ))
+
+#PlanC has a much lower probability of loss than the other plans and is very close in NPV to Plan A, however again becasue of risk neutrality Plan A is again prefered becasue it has the highest expected value.
+
+kdist = cbind("y1" = c(1,.5,.25), "y2" = c(.5,1,.4), "y3" = c(.25,.4,1))
+row.names(kdist) = c("y1", "y2", "y3")
+
+library(mvtnorm)
+library(QRM)
+
+set.seed(544)
+plot(rcopula.t(10000, 2, kdist)[,c(1:2)], xlab = "Year1 Dist.", ylab = "Year2 Dist.")
+
+plot(rcopula.t(10000, 2, kdist)[,c(2:3)], xlab = "Year2 Dist.", ylab = "Year3 Dist.")
+simulationNew = data.frame()
+set.seed(544)
+for (i in 1:10000){
+tempKendall = rcopula.t(1, 2, kdist)
+RandomDemand = c((HighDemand[1] - LowDemand[1]) * tempKendall[1] + LowDemand[1], (HighDemand[2] - LowDemand[2]) * tempKendall[2] + LowDemand[2], (HighDemand[3] - LowDemand[3]) * tempKendall[3] + LowDemand[3])
+
+# planA
+
+planA = tempDF
+planA$Demand = c(0, RandomDemand)
+planA$Capacity = c(0, 900000, 900000, 900000)
+planA$FixedCost = c(900000000, 0, 0, 0)
+planA$Revenue = pmin(planA$Capacity, planA$Demand) * price
+planA$VariableCost = pmin(planA$Capacity, planA$Demand) * costA
+planA$Profit = planA$Revenue - planA$VariableCost - planA$FixedCost
+planA$DiscountFactor = c(1, 1/(1+DiscountRateA), 1/(1+DiscountRateA)^2, 1/(1+DiscountRateA)^3)
+planA$NPV = planA$Profit * planA$DiscountFactor
+
+# planB
+
+planB = tempDF
+planB$Demand = c(0, RandomDemand)
+planB$Capacity = c(0, 300000, 300000*2, 300000*3)
+planB$FixedCost = c(300000000, 300000000, 300000000, 0)
+planB$VariableCost = pmin(planB$Capacity, planB$Demand) * costB
+planB$Revenue = pmin(planB$Capacity, planB$Demand) * price
+planB$Profit = planB$Revenue - planB$VariableCost - planB$FixedCost
+planB$Profit = planB$Profit + c(0,0,0,300000000)
+planB$DiscountFactor = c(1, 1/(1+DiscountRateB), 1/(1+DiscountRateB)^2, 1/(1+DiscountRateB)^3)
+planB$NPV = planB$Profit * planB$DiscountFactor
+
+# planC
+planC = tempDF
+planC$Demand = c(0, RandomDemand)
+Plants = c(0,1)
+Plants[3] = ifelse(planC$Demand[2] < (Plants[2] * 300000),
+Plants[2],
+Plants[2] + 1)
+Plants[4] = ifelse(planC$Demand[3] < (Plants[3] * 300000),
+Plants[3],
+Plants[3] + 1)
+
+planC$Capacity = Plants*300000
+planC$FixedCost = c(300000000*diff(Plants), 0)
+planC$VariableCost = pmin(planC$Capacity, planC$Demand) * costB
+planC$Revenue = pmin(planC$Capacity, planC$Demand) * price
+planC$Profit = planC$Revenue - planC$VariableCost - planC$FixedCost
+if (Plants[4] > Plants[3]){
+planC$Profit = planC$Profit + c(0,0,0,300000000)
+}
+planC$DiscountFactor = c(1, 1/(1+DiscountRateB), 1/(1+DiscountRateB)^2, 1/(1+DiscountRateB)^3)
+planC$NPV = planC$Profit * planC$DiscountFactor
+
+simulationNew = rbind(simulationNew,
+cbind(NPVA = sum(planA$NPV),
+NPVB = sum(planB$NPV),
+NPVC = sum(planC$NPV)))
+}
+
+saveRDS(simulationNew, "simulationNew.RDS")
+
+simulationNew = readRDS("simulationNew.RDS")
+par(mar = c(5,5,2,5))
+h = hist(simulationNew$NPVA, main = "NPV of Plan A", breaks = 100)
+par(new = T)
+ec = ecdf(simulationNew$NPVA)
+plot(x = h$mids, y=ec(h$mids)*max(h$counts), col = rgb(0,0,0,alpha=0), axes=F, xlab=NA, ylab=NA)
+lines(x = h$mids, y=ec(h$mids)*max(h$counts), col ='red')
+
+
+
+par(mar = c(5,5,2,5))
+h = hist(simulationNew$NPVB, main = "NPV of Plan B", breaks = 100)
+par(new = T)
+ec = ecdf(simulationNew$NPVB)
+plot(x = h$mids, y=ec(h$mids)*max(h$counts), col = rgb(0,0,0,alpha=0), axes=F, xlab=NA, ylab=NA)
+lines(x = h$mids, y=ec(h$mids)*max(h$counts), col ='red')
+
+par(mar = c(5,5,2,5))
+h = hist(simulationNew$NPVC, main = "NPV of Plan C", breaks = 100)
+par(new = T)
+ec = ecdf(simulationNew$NPVC)
+plot(x = h$mids, y=ec(h$mids)*max(h$counts), col = rgb(0,0,0,alpha=0), axes=F, xlab=NA, ylab=NA)
+lines(x = h$mids, y=ec(h$mids)*max(h$counts), col ='red')
+
+reqPerc = c(.01,.05,.1,.25,.50,.75,.90,.95,.99)
+kable(cbind.data.frame( "PlanA" = rbind("Max" = max(simulationNew$NPVA), "Min" = min(simulationNew$NPVA),"Expected" = mean(simulationNew$NPVA), cbind.data.frame("PlanA" = quantile(simulationNew$NPVA, reqPerc)) ),"PlanB" = rbind("Max" = max(simulationNew$NPVB), "Min" = min(simulationNew$NPVB), "Expected" = mean(simulationNew$NPVB),     cbind.data.frame("PlanB" = quantile(simulationNew$NPVB, reqPerc)) ),  "PlanC" = rbind("Max" = max(simulationNew$NPVC), "Min" = min(simulationNew$NPVC), "Expected" = mean(simulationNew$NPVC), cbind.data.frame("PlanC" = quantile(simulationNew$NPVC, reqPerc)) ) ))
+
+kable(cbind.data.frame(  "PlanA" = rbind("Probability of Loss" = mean(simulationNew$NPVA < 0)), "PlanB" = rbind("Probability of Loss" = mean(simulationNew$NPVB < 0)),  "PlanC" = rbind("Probability of Loss" = mean(simulationNew$NPVC < 0)) ))
+
+#Plan C has the lowest probability of loss and highest expected value therefor it is the prefered plan
+```
+
