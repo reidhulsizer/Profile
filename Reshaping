@@ -1,5 +1,5 @@
-Response = read.csv("ShoeDazzle_Response.csv", header=TRUE)
-Stimulation = read.csv("ShoeDazzle_Stimulation.csv", header=TRUE)
+#Copeied and Pasted due to licensing
+
 Stimulation$Date.Location <- as.character(paste(Stimulation$Date, Stimulation$Geography, sep = "."))
 Response$Date.Location <- as.character(paste(Response$Date, Response$Geography, sep = "."))
 MarketingSpend1 = as.data.frame(unique(Response$Date.Location))
