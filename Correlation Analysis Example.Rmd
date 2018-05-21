@@ -1,0 +1,109 @@
+---
+title: "JR"
+author: "Reid Hulsizer"
+date: "5/10/2018"
+output: html_document
+---
+```{r}
+library(zoo)
+library(xts)
+```
+
+```{r}
+getSymbols("BMCH")
+getSymbols("BLDR")
+getSymbols("CCF")
+getSymbols("FBM")
+getSymbols("GCP")
+getSymbols("ROCK")
+getSymbols("IBP")
+getSymbols("IIIN")
+getSymbols("NCS")
+getSymbols("PATK")
+getSymbols("PGEM")
+getSymbols("NX")
+getSymbols("BLD")
+getSymbols("TREX")
+```
+
+
+```{r}
+BLD = na.approx(BLD)
+```
+
+```{r}
+smallcapbuilders = cbind(BLD$BLD.Adjusted , BLDR$BLDR.Adjusted,  CCF$CCF.Adjusted,  GCP$.GCP.Adjusted, 
+                         IIIN$IIIN.Adjusted, NCS$NCS.Adjusted,
+                         NX$NX.Adjusted,
+                         PATK$PATK.Adjusted, 
+                         ROCK$ROCK.Adjusted,
+                         TREX$TREX.Adjusted)
+```
+
+```{r}
+smallcapbuilders = na.approx(smallcapbuilders)
+a = cor(smallcapbuilders)
+```
+NCS & NX seem to be different
+qualitative research suggets Morley is less like NX & NCS b/c they are not traditional constuction companies
+
+```{r}
+smallcapbuilders[,5:6] = NULL
+```
+
+
+```{r}
+smallcapbuilders2 = cbind(BLD$BLD.Adjusted , BLDR$BLDR.Adjusted,  CCF$CCF.Adjusted,  GCP$.GCP.Adjusted, 
+                         IIIN$IIIN.Adjusted, 
+                         PATK$PATK.Adjusted, 
+                         ROCK$ROCK.Adjusted,
+                         TREX$TREX.Adjusted)
+```
+
+```{r}
+b = cor(smallcapbuilders2)
+```
+
+
+```{r}
+getSymbols("AGDZX")
+AGDZX = na.approx(AGDZX)
+getSymbols("FUSVX")
+FUSVX = na.approx(FUSVX)
+getSymbols("VIMAX")
+getSymbols("VSMAX")
+```
+
+```{r}
+JRportfolio = cbind( FUSVX$FUSVX.Adjusted, VIMAX$VIMAX.Adjusted, VSMAX$VSMAX.Adjusted)
+```
+```{r}
+c = cor(JRportfolio, smallcapbuilders2)
+d = cor(AGDZX$AGDZX.Adjusted, smallcapbuilders2["2013-10-21/2018-05-09"])
+c = rbind(c,d)
+```
+
+
+```{r}
+getSymbols("^GSPC")
+getSymbols("^RUT")
+getSymbols("EAF")
+getSymbols("^NDX")
+getSymbols("EEM")
+RUT = na.approx(RUT)
+```
+
+
+
+```{r}
+IndexOptions = cbind( GSPC$GSPC.Adjusted, RUT$RUT.Adjusted, 
+NDX$NDX.Adjusted,
+EEM$EEM.Adjusted)
+```
+
+```{r}
+f = cor(IndexOptions, smallcapbuilders2)
+
+```
+
+
