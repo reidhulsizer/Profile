@@ -1,0 +1,78 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+getSymbols("CMCM")
+getSymbols("SYMC")
+getSymbols("INFY")
+```
+
+
+
+```{r}
+getSymbols("AAPL")
+getSymbols("KHC")
+getSymbols("WFC")
+getSymbols("LUV")
+getSymbols("SYF")
+getSymbols("USB")
+getSymbols("YELP")
+getSymbols("PFE")
+getSymbols("WMT")
+getSymbols("V")
+```
+
+
+
+```{r}
+getSymbols("DAL")
+getSymbols("CVS")
+getSymbols("ETN")
+getSymbols("WM")
+getSymbols("NEE")
+getSymbols("NGG")
+getSymbols("IEP")
+getSymbols("TM")
+getSymbols("WPP")
+getSymbols("TAP")
+```
+
+
+
+```{r}
+getSymbols("AGNC")
+getSymbols("VTR")
+getSymbols("NRZ")
+getSymbols("TEX")
+```
+
+
+
+```{r}
+stocks = merge(AAPL$AAPL.Adjusted, WMT$WMT.Adjusted, LUV$LUV.Adjusted, CMCM$CMCM.Adjusted, KHC$KHC.Adjusted, YELP$YELP.Adjusted, DAL$DAL.Adjusted, CVS$CVS.Adjusted, NGG$NGG.Adjusted, IEP$IEP.Adjusted, TM$TM.Adjusted, WPP$WPP.Adjusted, TAP$TAP.Adjusted, SYF$SYF.Adjusted, SYMC$SYMC.Adjusted, INFY$INFY.Adjusted, AGNC$AGNC.Adjusted, VTR$VTR.Adjusted, NRZ$NRZ.Adjusted, TEX$TEX.Adjusted)
+colnames(stocks) = c("APPL", "WMT", "LUV", "CMCM", "KHC", "YELP", "DAL", "CVS",  "NGG", "IEP", "TM", "WPP", "TAP", "SYF", "SYMC", "INFY", "AGNC", "VTR", "NRZ", "TEX")
+```
+
+
+
+```{r}
+corrmatrix = cor(stocks, use = "pairwise.complete.obs")
+corrplot.mixed(corrmatrix, number.cex = .5, order = "FPC", lower.col = "black")
+```
+
+
+
+```{r}
+returns = diff(log(stocks))
+returns = returns[-1,]
+port_spec <- portfolio.spec(colnames(returns))
+port_spec <- add.constraint(portfolio = port_spec, type = "long_only")
+port_spec <- add.constraint(portfolio = port_spec, type = "full_investment")
+port_spec <- add.objective(portfolio = port_spec, type = "risk_budget", name = "StdDev", min_prisk = .01, max_prisk = .075)
+optimize.portfolio(R = returns, portfolio = port_spec, optimize_method = "ROI",
+trace = TRUE)
+```
+
+
