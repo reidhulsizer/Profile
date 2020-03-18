@@ -1,0 +1,153 @@
+---
+title: "EmailEngagementModel"
+output: html_document
+---
+
+```{r}
+library(RODBC)
+dbhandle <- odbcDriverConnect('driver={SQL Server};server=XXXXXXXX;database=DWSupport;trusted_connection=true')
+Emails = sqlQuery(dbhandle, "select s.JobID, DATEADD(HOUR, -2, s.EventDate) as Sent,  datediff(year, cu.Birthday, DATEADD(HOUR, -2, s.EventDate)) as Age, cu.CIF, cu.Gender, cu.Individual, cu.Insider, 
+datediff(month, cu.OgCustDate, DATEADD(HOUR, -2, s.EventDate)) as CustomerMonths, cu.State, Case when min(c.EventDate) IS NULL then 'No' else 'Yes'end as Clicked, left(co.MailingPostalCode, 5) as SFZip,
+ Case when min(o.EventDate) IS NULL then 'No' else 'Yes'end as Opened, Case when min(b.EventDate) IS NULL then 'No' else 'Yes'end as Bounced, left(cu.CFZIP, 5) as CFZip ,
+ CASE when datepart(hour, DATEADD(HOUR, -2, s.EventDate)) In (7,8,9) then '7am to 10am' when datepart(hour, DATEADD(HOUR, -2, s.EventDate)) In (10,11,12) then '10am to 1pm' when datepart(hour, DATEADD(HOUR, -2, s.EventDate)) In (13,14,15,16,17) then '1pm to 6pm' else '6pm to 7 am' end as timeofday
+,Case when s.Domain in ('GMAIL.COM') then 'Gmail' when s.Domain in ('YAHOO.COM') then 'Yahoo' when s.Domain in ('hotmail.com') then 'Hotmail' when s.Domain in ('AOL.COM') then 'AOL' when s.Domain in ('comcast.net') then 'Comcast' when s.Domain in ('nationwide.com') then 'Nationwide' when s.Domain in ('sbcglobal.net') then 'sbcglobal' when s.Domain in ('MSN.COM') then 'MSN' else 'Other' end as Domain
+, Case when datepart(hour, DATEADD(HOUR, -2, s.EventDate)) in (6,7) then 'Sat-Sun' when datepart(hour, DATEADD(HOUR, -2, s.EventDate)) in (4,5) then 'Thr-Fri' else 'Mon-Wed' end as DayofWeek
+FROM [DataVault].[SLF].[MarketingCloud_Sent] as s
+left join [DataVault].[SLF].[MarketingCloud_Click] as c
+on s.JobID = c.JobID
+and s.ListID = c.ListID
+and s.BatchID = c.BatchID
+and s.SubscriberID = c.SubscriberID
+left join [DataVault].[SLF].[MarketingCloud_Open] as o
+on s.JobID = o.JobID
+and s.ListID = o.ListID
+and s.BatchID = o.BatchID
+and s.SubscriberID = o.SubscriberID
+left join [DataVault].[SLF].[MarketingCloud_Bounce] as b
+on s.JobID = b.JobID
+and s.ListID = b.ListID
+and s.BatchID = b.BatchID
+and s.SubscriberID = b.SubscriberID
+inner Join [Datavault].[SLF].[Contact] co
+on s.[SubscriberKey] = co.id
+inner join (SELECT CFCIF# as CIF, CFSTAT as State, CFINSC as Insider, CFINDI as Individual, CFBIRD as Birthday, CFORGD as OgCustDate, CFSEX as Gender, CFZIP
+  FROM [Archive].[silverlake.jha].[CFMAST]
+  where JhaPostingDate = (select max(JhaPostingDate) from [Archive].[silverlake.jha].[CFMAST])) as cu
+  on co.CIF_SFDC2__c = cu.CIF
+group by s.JobID, s.EventDate, s.Domain, cu.Birthday, cu.CIF, cu.Gender, cu.Individual, cu.Insider, cu.OgCustDate, cu.State, co.MailingPostalCode, cu.CFZIP")
+```
+
+
+```{r}
+Impact = cbind.data.frame(Emails$CIF, Emails$Sent, Emails$Clicked, Emails$Opened, Emails$Bounced, Emails$JobID)
+colnames(Impact) = c("CIF", "Time", "Clicked", "Opened", "Bounced", "JobID")
+Impact =  Impact[order(Impact$Time),]
+Impact$Bounced2[Impact$Bounced=="Yes"] = 1
+Impact$Bounced2[Impact$Bounced=="No"] = 0
+Impact$Clicked2[Impact$Clicked=="Yes"] = 1
+Impact$Clicked2[Impact$Clicked=="No"] = 0
+Impact$Opened2[Impact$Opened=="Yes"] = 1
+Impact$Opened2[Impact$Opened=="No"] = 0
+Impact$Clicked = Impact$Clicked2
+Impact$Opened = Impact$Opened2
+Impact$Bounced = Impact$Bounced2
+Impact$Bounced2 = NULL
+Impact$Clicked2 = NULL
+Impact$Opened2 = NULL
+library(dplyr)
+library(RcppRoll)
+ Impact = Impact %>%
+ group_by(CIF) %>%
+  mutate(index = row_number())
+ Impact$index = Impact$index - 1
+Impact = Impact %>%
+  arrange(CIF,Time) %>%
+ group_by(CIF) %>%
+   mutate(PreviousClicked = cumsum(Clicked))
+Impact = Impact %>%
+  arrange(CIF,Time) %>%
+ group_by(CIF) %>%
+   mutate(PreviousOpened = cumsum(Opened))
+Impact = Impact %>%
+  arrange(CIF,Time) %>%
+ group_by(CIF) %>%
+   mutate(PreviousBounced = cumsum(Bounced))
+for (i in 1:length(Impact$Opened)) {if(Impact$Bounced[i] > 0 & Impact$PreviousBounced[i] > 0) {Impact$PreviousBounced[i] = Impact$PreviousBounced[i] - Impact$Bounced[i]}}
+for (i in 1:length(Impact$Opened)) {if(Impact$Clicked[i] > 0 & Impact$PreviousClicked[i] > 0) {Impact$PreviousClicked[i] = Impact$PreviousClicked[i] - Impact$Clicked[i]}}
+for (i in 1:length(Impact$Opened)) {if(Impact$Opened[i] > 0 & Impact$PreviousOpened[i] > 0) {Impact$PreviousOpened[i] = Impact$PreviousOpened[i] - Impact$Opened[i]}}
+Impact$PreviousOpenedPercentage = Impact$PreviousOpened/Impact$index
+Impact$PreviousClickedPercentage = Impact$PreviousClicked/Impact$index
+Impact$PBounce = 0
+Impact$PBounce[Impact$PreviousBounced>0] = 1
+Impact$PreviousSent = Impact$index
+Impact$index = NULL
+Impact$PreviousBounced = NULL
+Impact$PreviousOpened = NULL
+Impact$PreviousClicked = NULL
+Impact$Clicked = NULL
+Impact$Bounced = NULL
+Impact$Opened = NULL
+Emails = merge(Emails, Impact, by.x = c("CIF","Sent", "JobID"), by.y = c("CIF","Time", "JobID"))
+Emails$PreviousOpenedPercentage[Emails$PreviousSent == 0] = 0
+Emails$PreviousClickedPercentage[Emails$PreviousSent == 0] = 0
+Emails$FirstEmail = c('No')
+Emails$FirstEmail[Emails$PreviousSent == 0] = c('Yes')
+```
+
+
+```{r}
+fit1 <- glm(Clicked ~ PreviousClickedPercentage + I(PreviousClickedPercentage^2) + PreviousClickedPercentage*PreviousSent + PreviousSent +  I(PreviousSent^2) +  I(PreviousSent^3)  + PreviousOpenedPercentage  + I(PreviousOpenedPercentage^2) + I(PreviousOpenedPercentage^3)  + PBounce + FirstEmail + Age + Gender  + CustomerMonths + I(CustomerMonths^2)  + timeofday   + Domain + DayofWeek + Gender*timeofday
+, data = Emails, family = "binomial")
+summary(fit1)
+nullmodel <- glm(Clicked ~ 1 , data = Emails, family="binomial")
+1-logLik(fit1)/logLik(nullmodel)
+summary  = as.data.frame(summary(fit1)$coefficients, keep.rownames = TRUE)
+summary$varaible = row.names(summary)
+test = expand.grid(PBounce = unique(Emails$PBounce), PreviousSent = seq(0,24,8),
+            Domain = unique(Emails$Domain),  FirstEmail = unique(Emails$FirstEmail), Gender = unique(Emails$Gender) , timeofday = unique(Emails$timeofday), DayofWeek = unique(Emails$DayofWeek), Age = seq(15,75,20),  PreviousClickedPercentage = seq(0,1,.25),  PreviousOpenedPercentage = seq(0,1,.25), CustomerMonths = seq(0,36,12))
+test$Predict = predict(fit1, test, type= "response")
+test$Gender = as.character(test$Gender)
+test$PreviousClickedPercentage = as.numeric(test$PreviousClickedPercentage)
+test$PreviousOpenedPercentage =  as.numeric(test$PreviousOpenedPercentage)
+test$PreviousClickedPercentage = test$PreviousClickedPercentage * 4
+test$PreviousOpenedPercentage = test$PreviousOpenedPercentage * 4
+```
+
+
+
+
+
+```{r}
+library(tree)
+fit2 = tree(Clicked ~ PreviousClickedPercentage + I(PreviousClickedPercentage^2) + PreviousSent +  I(PreviousSent^2) +  I(PreviousSent^3)  + PreviousOpenedPercentage  + I(PreviousOpenedPercentage^2) + I(PreviousOpenedPercentage^3)  + PBounce + FirstEmail + Age + Gender  + CustomerMonths + I(CustomerMonths^2)  + timeofday   + Domain + DayofWeek 
+, data = Emails)
+```
+
+
+
+```{r}
+Emails$PredictTree = predict(fit2, Emails, type= "class")
+summary(fit2)
+```
+
+
+
+
+
+```{r}
+1-(deviance(fit2)/a)
+```
+
+
+
+
+
+```{r}
+library(data.table)
+setwd("//bofi-sd-cifs/VCIFS02/Department/Office of the CEO/Project/Analysts/Reid Hulsizer")
+fwrite(test, "emailpredictions.csv")
+```
+
+
+
+
