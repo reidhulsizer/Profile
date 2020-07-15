@@ -1,0 +1,347 @@
+title: "Pre-Application Funnel Page Optimization Model"
+output: html_notebook
+---
+
+
+The goal of this model is to direct prospects(potential customers) away from pages that will decrease their probability of applying for an account and towards pages that will increase their probability of applying for an account.
+
+The Assumption is that we can takeaway any links from pages restricting the flow of prospects to pages that decrease their probability of applying for an account. Pages that have strong negative impacts will be reviewed with the Product Management team to see if link removal is an option. Pages with strong probability lifts will also be reviewed with Product Management to look for UI opportunities that can maximize customer flow through those node/destination page relationships.
+
+
+useful:
+trace(utils:::unpackPkgZip, edit=TRUE)
+
+Load
+```{r}
+library(RPostgreSQL)
+drv = dbDriver("PostgreSQL")
+con = dbConnect(drv,
+host = "db.panoply.io",
+port = "5439",
+user = "rhulsizer@axosbank.com",
+password = "XXXX",
+dbname = "axosbank_dw")
+webdata2 = dbGetQuery(con,"
+  SELECT clientid, cifno as CIF, convert(datetime,datehourminute) min, devicecategory, operatingsystem, browser, concat(devicecategory, mobiledeviceinfo) as devicefull, sourcemedium as origin, metro,  pagetitle, pagepath, Right(metro, 2) state
+from googleanalytics_cidhitcombined_current
+where  hit_type = 'pageview' and convert(datetime,datehourminute) > dateadd(day,-1000,convert(datetime,getdate()))")
+```
+
+
+Clean Data
+```{r}
+library(dplyr)
+library(reconstructr)
+library(data.table)
+library(dplyr)
+library(data.table)
+library(purrr)
+library(gdata)
+library(reshape2)
+library(tidyr)
+sampledf = webdata2
+sampledf = distinct(sampledf)
+trim = function (x) gsub("^\\s+|\\s+$", "", x)
+sampledf$pagepath = tolower(sampledf$pagepath)
+sampledf$pagepath = trim(sampledf$pagepath)
+sampledf = sessionise(sampledf, min, clientid, threshold = 1800)
+sampledf = sampledf %>% arrange(clientid, session_id, min) 
+sampledf$eventid = seq.int(nrow(sampledf))
+temp = sampledf
+sampledf = sampledf %>% group_by(clientid, session_id) %>% mutate(session.lag.pagepath1 = dplyr::lag(pagepath, n = 1, default=NA))
+sampledf = sampledf %>% filter(!(session.lag.pagepath1 == pagepath) | is.na(session.lag.pagepath1))
+temp = temp %>% filter(eventid %in% unique(sampledf$eventid))
+sampledf = temp
+sampledf$time_delta = NULL
+sampledf$session_id = NULL
+sampledf = sessionise(sampledf, min, clientid, threshold = 1800)
+sampledf = sampledf %>% group_by(clientid, session_id) %>% mutate(session.lag.pagepath1 = dplyr::lag(pagepath, n = 1, default=NA))
+sampledf = sampledf %>% group_by(clientid, session_id) %>% mutate(session.lag.eventid = dplyr::lag(eventid, n = 1, default=NA))
+sampledf = sampledf %>% group_by(clientid, session_id) %>% mutate(session.lag.pagepath2 = dplyr::lag(pagepath, n = 2, default=NA))
+sampledf = sampledf %>% group_by(clientid, session_id) %>% mutate(session.lag.pagepath3 = dplyr::lag(pagepath, n = 3, default=NA))
+sampledf = sampledf %>% group_by(clientid, session_id) %>% mutate(session.lag.pagepath4 = dplyr::lag(pagepath, n = 4, default=NA))
+sampledf = sampledf %>% group_by(clientid, session_id) %>% mutate(session.lag.pagepath5 = dplyr::lag(pagepath, n = 5, default=NA))
+openaccount = subset(sampledf, grepl( 'enrollment', sampledf$pagepath))
+notchillpages = subset(sampledf, !grepl( 'axosbanklo', sampledf$pagepath) & !startsWith(sampledf$pagepath, 'apps', trim=T, ignore.case=T) & !startsWith(sampledf$pagepath, 'app', trim=T, ignore.case=T) & !startsWith(sampledf$pagepath, 'axos', trim=T, ignore.case=T)& !startsWith(sampledf$pagepath, 'careers', trim=T, ignore.case=T)& !startsWith(sampledf$pagepath, 'hello', trim=T, ignore.case=T) & !startsWith(sampledf$pagepath, 'homeloans', trim=T, ignore.case=T) & !startsWith(sampledf$pagepath, 'www', trim=T, ignore.case=T) & !startsWith(sampledf$pagepath, 'nationwide.axos', trim=T, ignore.case=T) & !startsWith(sampledf$pagepath, 'web', trim=T, ignore.case=T))
+IDs2Remove = as.data.frame(unique(notchillpages$clientid))
+colnames(IDs2Remove) = c('clientid')
+temp = openaccount %>%
+    group_by(clientid) %>%
+    arrange(min) %>%
+    slice(1L)
+IDs2Remove = subset(IDs2Remove, !(clientid %in% unique(factor(temp$clientid))))
+sampledf = subset(sampledf, !(sampledf$clientid %in% IDs2Remove$clientid))
+temp$applied = 1
+temp = temp %>% select(min, applied,  clientid, pagepath) %>% rename(appliedtime = min, enrolledpage =pagepath)
+sampledf = left_join(sampledf, temp, by = c("clientid" = "clientid"))
+sampledf = subset(sampledf, appliedtime > min | is.na(appliedtime))
+sampledf$applied[is.na(sampledf$applied)] = 0
+sampledf$state[is.na(sampledf$state)] = 'Unknown'
+sampledf$destination = sampledf$pagepath 
+sampledf$node = sampledf$session.lag.pagepath1 
+sampledf = sampledf %>% unite(link, node, destination)
+```
+
+
+Prepare Data for Modeling/Feature Engineering - Destination Pages
+```{r}
+nodes = subset(sampledf, !is.na(sampledf$session.lag.eventid)) %>% group_by(session.lag.pagepath1) %>% count() %>% arrange(desc(n))
+nodedf = sampledf %>% ungroup() %>% select(applied, pagepath, devicecategory, operatingsystem, browser,  time_delta, session.lag.pagepath1, eventid, state, session.lag.eventid, link, origin, session.lag.pagepath2, session.lag.pagepath3, session.lag.pagepath4, session.lag.pagepath5)
+nodedf[] = lapply(nodedf, function(x) if(is.character(x)) factor(x) else x)
+destinationdf = subset(nodedf, session.lag.pagepath1=='www.axosbank.com/' | session.lag.pagepath1=='www.axosbank.com/tools/calculators/apy-calculator' |
+session.lag.pagepath1=='www.axosbank.com/personal')
+pages = destinationdf %>% group_by(session.lag.pagepath1, pagepath) %>% tally() %>% arrange(session.lag.pagepath1 , desc(n)) %>% arrange(session.lag.pagepath1, desc(n)) %>% group_by(session.lag.pagepath1) %>% mutate(rank = row_number()) %>% filter(rank <= 5) %>% unite(link,session.lag.pagepath1,pagepath)
+destinationdf = subset(destinationdf, (link %in% unique(pages$link)))
+nodedf = subset(nodedf, eventid %in% unique(destinationdf$session.lag.eventid))
+operatingsystems = destinationdf %>% group_by(session.lag.pagepath1, operatingsystem) %>% tally() %>% arrange(session.lag.pagepath1 , desc(n)) %>% arrange(session.lag.pagepath1, desc(n)) %>% group_by(session.lag.pagepath1) %>% mutate(rank = row_number()) %>% filter(rank <= 5) %>% unite(link,session.lag.pagepath1,operatingsystem)
+destinationdf$operatingsystem = as.character(destinationdf$operatingsystem)
+destinationdf = destinationdf %>% mutate(operatingsystem = replace(operatingsystem, !(paste(session.lag.pagepath1,operatingsystem,sep="_") %in% unique(operatingsystems$link)), "Uncommon"))
+destinationdf$operatingsystem = factor(destinationdf$operatingsystem)
+browsers = destinationdf %>% group_by(session.lag.pagepath1, browser) %>% tally() %>% arrange(session.lag.pagepath1 , desc(n)) %>% arrange(session.lag.pagepath1, desc(n)) %>% group_by(session.lag.pagepath1) %>% mutate(rank = row_number()) %>% filter(rank <= 3) %>% unite(link,session.lag.pagepath1,browser)
+destinationdf$browser = as.character(destinationdf$browser)
+destinationdf = destinationdf %>% mutate(browser = replace(browser, !(paste(session.lag.pagepath1,browser,sep="_") %in% unique(browsers$link)), "Uncommon"))
+destinationdf$browser = factor(destinationdf$browser)
+states = destinationdf %>% group_by(session.lag.pagepath1, state) %>% tally() %>% arrange(session.lag.pagepath1 , desc(n)) %>% arrange(session.lag.pagepath1, desc(n)) %>% group_by(session.lag.pagepath1) %>% mutate(rank = row_number()) %>% filter(rank <= 9) %>% unite(link,session.lag.pagepath1,state)
+destinationdf$state = as.character(destinationdf$state)
+destinationdf = destinationdf %>% mutate(state = replace(state, !(paste(session.lag.pagepath1,state,sep="_") %in% unique(states$link)), "Uncommon"))
+destinationdf$state = factor(destinationdf$state)
+origins = destinationdf %>% group_by(session.lag.pagepath1, origin) %>% tally() %>% arrange(session.lag.pagepath1 , desc(n)) %>% arrange(session.lag.pagepath1, desc(n)) %>% group_by(session.lag.pagepath1) %>% mutate(rank = row_number()) %>% filter(rank <= 3) %>% unite(link,session.lag.pagepath1,origin)
+destinationdf$origin = as.character(destinationdf$origin)
+destinationdf = destinationdf %>% mutate(origin = replace(origin, !(paste(session.lag.pagepath1,origin,sep="_") %in% unique(origins$link)), "Uncommon"))
+destinationdf$origin = factor(destinationdf$origin)
+temps = destinationdf %>% group_by(session.lag.pagepath1, session.lag.pagepath2) %>% tally() %>% arrange(session.lag.pagepath1 , desc(n)) %>% arrange(session.lag.pagepath1, desc(n)) %>% group_by(session.lag.pagepath1) %>% mutate(rank = row_number()) %>% filter(rank <= 2) %>% unite(link,session.lag.pagepath1,session.lag.pagepath2)
+destinationdf$session.lag.pagepath2 = as.character(destinationdf$session.lag.pagepath2)
+destinationdf = destinationdf %>% mutate(session.lag.pagepath2 = replace(session.lag.pagepath2, !(paste(session.lag.pagepath1,session.lag.pagepath2,sep="_") %in% unique(temps$link)), "Uncommon"))
+destinationdf$session.lag.pagepath2 = factor(destinationdf$session.lag.pagepath2)
+temps = destinationdf %>% group_by(session.lag.pagepath1, session.lag.pagepath3) %>% tally() %>% arrange(session.lag.pagepath1 , desc(n)) %>% arrange(session.lag.pagepath1, desc(n)) %>% group_by(session.lag.pagepath1) %>% mutate(rank = row_number()) %>% filter(rank <= 2) %>% unite(link,session.lag.pagepath1,session.lag.pagepath3)
+destinationdf$session.lag.pagepath3 = as.character(destinationdf$session.lag.pagepath3)
+destinationdf = destinationdf %>% mutate(session.lag.pagepath3 = replace(session.lag.pagepath3, !(paste(session.lag.pagepath1,session.lag.pagepath3,sep="_") %in% unique(temps$link)), "Uncommon"))
+destinationdf$session.lag.pagepath3 = factor(destinationdf$session.lag.pagepath3)
+temps = destinationdf %>% group_by(session.lag.pagepath1, session.lag.pagepath4) %>% tally() %>% arrange(session.lag.pagepath1 , desc(n)) %>% arrange(session.lag.pagepath1, desc(n)) %>% group_by(session.lag.pagepath1) %>% mutate(rank = row_number()) %>% filter(rank <= 2) %>% unite(link,session.lag.pagepath1,session.lag.pagepath4)
+destinationdf$session.lag.pagepath4 = as.character(destinationdf$session.lag.pagepath4)
+destinationdf = destinationdf %>% mutate(session.lag.pagepath4 = replace(session.lag.pagepath4, !(paste(session.lag.pagepath1,session.lag.pagepath4,sep="_") %in% unique(temps$link)), "Uncommon"))
+destinationdf$session.lag.pagepath4 = factor(destinationdf$session.lag.pagepath4)
+temps = destinationdf %>% group_by(session.lag.pagepath1, session.lag.pagepath5) %>% tally() %>% arrange(session.lag.pagepath1 , desc(n)) %>% arrange(session.lag.pagepath1, desc(n)) %>% group_by(session.lag.pagepath1) %>% mutate(rank = row_number()) %>% filter(rank <= 2) %>% unite(link,session.lag.pagepath1,session.lag.pagepath5)
+destinationdf$session.lag.pagepath5 = as.character(destinationdf$session.lag.pagepath5)
+destinationdf = destinationdf %>% mutate(session.lag.pagepath5 = replace(session.lag.pagepath5, !(paste(session.lag.pagepath1,session.lag.pagepath5,sep="_") %in% unique(temps$link)), "Uncommon"))
+destinationdf$session.lag.pagepath5 = factor(destinationdf$session.lag.pagepath5)
+destinationdf = destinationdf %>% select(session.lag.pagepath1,pagepath,applied, devicecategory, operatingsystem, browser, state, time_delta, origin, session.lag.pagepath2, session.lag.pagepath3, session.lag.pagepath4, session.lag.pagepath5, eventid)
+destinationdf[] = lapply(destinationdf, as.character)
+destinationdf$session.lag.pagepath2[ is.na(destinationdf$session.lag.pagepath2) ] = "Unknown"
+destinationdf$session.lag.pagepath3[ is.na(destinationdf$session.lag.pagepath3) ] = "Unknown"
+destinationdf$session.lag.pagepath4[ is.na(destinationdf$session.lag.pagepath4) ] = "Unknown"
+destinationdf$session.lag.pagepath5[ is.na(destinationdf$session.lag.pagepath5) ] = "Unknown"
+destinationdf$state[ is.na(destinationdf$state) ] = "Unknown"
+destinationdf[] = lapply(destinationdf, factor)
+destinationdf$time_delta = as.numeric(as.character(destinationdf$time_delta))/60
+destinationdf$eventid = as.numeric(as.character(destinationdf$eventid))
+```
+
+
+Partition Destination Page Data
+```{r}
+samplesize = floor(0.85 * nrow(destinationdf))
+set.seed(42)
+splitindex = sample(seq_len(nrow(destinationdf)), size = samplesize)
+train = destinationdf[splitindex, ]
+train = train %>% group_by(session.lag.pagepath1) %>% nest() %>% droplevels()
+train = train %>% mutate(data = map(data, ~droplevels(.))) %>% arrange(session.lag.pagepath1)
+test = destinationdf[-splitindex, ]
+test = test %>% group_by(session.lag.pagepath1) %>% nest() %>% droplevels()
+test = test %>% mutate(data = map(data, ~droplevels(.))) %>% arrange(session.lag.pagepath1)
+```
+
+
+Logistic Regression Model for Destination Pages
+```{r}
+library(broom)
+nodemodel = function(df) {
+  glm(applied ~ . -	applied - eventid, data = df, family = "binomial", na.action = na.exclude)
+}
+train = train %>% mutate(mod = map(data, nodemodel))
+test$mod = train$mod
+train = train %>%
+  mutate(prediction = map(mod, predict))
+test$mod = train$mod
+train = train %>% mutate(
+  tidy = map2(.x = mod, .y = data,  .f = ~ tidy(.x, data = .y)),
+  glance = map2(.x = mod, .y = data,  .f = ~ glance(.x, data = .y)),
+  prediction = map2(.x = mod, .y = data,  .f = ~ predict(.x, type ="response", data = .y, return_df = TRUE))
+)
+results = test %>% mutate(
+  prediction = map2(.x = mod, .y = data,  .f = ~ predict(.x, type ="response", newdata = .y, return_df = TRUE))
+)
+test = test %>% mutate(
+  tidy = map2(.x = mod, .y = data,  .f = ~ tidy(.x, newdata = .y)),
+  glance = map2(.x = mod, .y = data,  .f = ~ glance(.x, newdata = .y)),
+  augment = map2(.x = mod, .y = data,  .f = ~ augment(.x, newdata = .y))
+)
+results$mod = NULL
+results = unnest(results)
+trainresults = train %>% select(data, prediction) %>% unnest() %>% select(eventid, prediction)
+destinationresults = union_all(trainresults, results %>% select(eventid, prediction))
+results$pred = ifelse(results$prediction > .5,  1, 0)
+confusion = table(results$applied,results$pred)
+Accuracy = paste('Accuracy is equal to', sum(diag(confusion))/sum(confusion))
+Accuracy
+confusion
+```
+
+
+Prepare Data for Modeling/Feature Engineering - Node Pages
+```{r}
+operatingsystems = nodedf %>% group_by(pagepath, operatingsystem) %>% tally() %>% arrange(pagepath , desc(n)) %>% arrange(pagepath, desc(n)) %>% group_by(pagepath) %>% mutate(rank = row_number()) %>% filter(rank <= 5) %>% unite(link,pagepath,operatingsystem)
+nodedf$operatingsystem = as.character(nodedf$operatingsystem)
+nodedf = nodedf %>% mutate(operatingsystem = replace(operatingsystem, !(paste(pagepath,operatingsystem,sep="_") %in% unique(operatingsystems$link)), "Uncommon"))
+nodedf$operatingsystem = factor(nodedf$operatingsystem)
+browsers = nodedf %>% group_by(pagepath, browser) %>% tally() %>% arrange(pagepath , desc(n)) %>% arrange(pagepath, desc(n)) %>% group_by(pagepath) %>% mutate(rank = row_number()) %>% filter(rank <= 3) %>% unite(link,pagepath,browser)
+nodedf$browser = as.character(nodedf$browser)
+nodedf = nodedf %>% mutate(browser = replace(browser, !(paste(pagepath,browser,sep="_") %in% unique(browsers$link)), "Uncommon"))
+nodedf$browser = factor(nodedf$browser)
+states = nodedf %>% group_by(pagepath, state) %>% tally() %>% arrange(pagepath , desc(n)) %>% arrange(pagepath, desc(n)) %>% group_by(pagepath) %>% mutate(rank = row_number()) %>% filter(rank <= 9) %>% unite(link,pagepath,state)
+nodedf$state = as.character(nodedf$state)
+nodedf = nodedf %>% mutate(state = replace(state, !(paste(pagepath,state,sep="_") %in% unique(states$link)), "Uncommon"))
+nodedf$state = factor(nodedf$state)
+origins = nodedf %>% group_by(pagepath, origin) %>% tally() %>% arrange(pagepath , desc(n)) %>% arrange(pagepath, desc(n)) %>% group_by(pagepath) %>% mutate(rank = row_number()) %>% filter(rank <= 3) %>% unite(link,pagepath,origin)
+nodedf$origin = as.character(nodedf$origin)
+nodedf = nodedf %>% mutate(origin = replace(origin, !(paste(pagepath,origin,sep="_") %in% unique(origins$link)), "Uncommon"))
+nodedf$origin = factor(nodedf$origin)
+temps = nodedf %>% group_by(pagepath, session.lag.pagepath1) %>% tally() %>% arrange(pagepath , desc(n)) %>% arrange(pagepath, desc(n)) %>% group_by(pagepath) %>% mutate(rank = row_number()) %>% filter(rank <= 5) %>% unite(link,pagepath,session.lag.pagepath1)
+nodedf$session.lag.pagepath1 = as.character(nodedf$session.lag.pagepath1)
+nodedf = nodedf %>% mutate(session.lag.pagepath1 = replace(session.lag.pagepath1, !(paste(pagepath,session.lag.pagepath1,sep="_") %in% unique(temps$link)), "Uncommon"))
+nodedf$session.lag.pagepath1 = factor(nodedf$session.lag.pagepath1)
+temps = nodedf %>% group_by(pagepath, session.lag.pagepath2) %>% tally() %>% arrange(pagepath , desc(n)) %>% arrange(pagepath, desc(n)) %>% group_by(pagepath) %>% mutate(rank = row_number()) %>% filter(rank <= 2) %>% unite(link,pagepath,session.lag.pagepath2)
+nodedf$session.lag.pagepath2 = as.character(nodedf$session.lag.pagepath2)
+nodedf = nodedf %>% mutate(session.lag.pagepath2 = replace(session.lag.pagepath2, !(paste(pagepath,session.lag.pagepath2,sep="_") %in% unique(temps$link)), "Uncommon"))
+nodedf$session.lag.pagepath2 = factor(nodedf$session.lag.pagepath2)
+temps = nodedf %>% group_by(pagepath, session.lag.pagepath3) %>% tally() %>% arrange(pagepath , desc(n)) %>% arrange(pagepath, desc(n)) %>% group_by(pagepath) %>% mutate(rank = row_number()) %>% filter(rank <= 2) %>% unite(link,pagepath,session.lag.pagepath3)
+nodedf$session.lag.pagepath3 = as.character(nodedf$session.lag.pagepath3)
+nodedf = nodedf %>% mutate(session.lag.pagepath3 = replace(session.lag.pagepath3, !(paste(pagepath,session.lag.pagepath3,sep="_") %in% unique(temps$link)), "Uncommon"))
+nodedf$session.lag.pagepath3 = factor(nodedf$session.lag.pagepath3)
+temps = nodedf %>% group_by(pagepath, session.lag.pagepath4) %>% tally() %>% arrange(pagepath , desc(n)) %>% arrange(pagepath, desc(n)) %>% group_by(pagepath) %>% mutate(rank = row_number()) %>% filter(rank <= 2) %>% unite(link,pagepath,session.lag.pagepath4)
+nodedf$session.lag.pagepath4 = as.character(nodedf$session.lag.pagepath4)
+nodedf = nodedf %>% mutate(session.lag.pagepath4 = replace(session.lag.pagepath4, !(paste(pagepath,session.lag.pagepath4,sep="_") %in% unique(temps$link)), "Uncommon"))
+nodedf$session.lag.pagepath4 = factor(nodedf$session.lag.pagepath4)
+temps = nodedf %>% group_by(pagepath, session.lag.pagepath5) %>% tally() %>% arrange(pagepath , desc(n)) %>% arrange(pagepath, desc(n)) %>% group_by(pagepath) %>% mutate(rank = row_number()) %>% filter(rank <= 2) %>% unite(link,pagepath,session.lag.pagepath5)
+nodedf$session.lag.pagepath5 = as.character(nodedf$session.lag.pagepath5)
+nodedf = nodedf %>% mutate(session.lag.pagepath5 = replace(session.lag.pagepath5, !(paste(pagepath,session.lag.pagepath5,sep="_") %in% unique(temps$link)), "Uncommon"))
+nodedf$session.lag.pagepath5 = factor(nodedf$session.lag.pagepath5)
+nodedf = nodedf %>% select(pagepath, session.lag.pagepath1, applied, devicecategory, operatingsystem, browser, state, time_delta, origin, session.lag.pagepath2, session.lag.pagepath3, session.lag.pagepath4, session.lag.pagepath5, eventid)
+nodedf[] = lapply(nodedf, as.character)
+nodedf$session.lag.pagepath2[ is.na(nodedf$session.lag.pagepath2) ] = "Unknown"
+nodedf$session.lag.pagepath3[ is.na(nodedf$session.lag.pagepath3) ] = "Unknown"
+nodedf$session.lag.pagepath4[ is.na(nodedf$session.lag.pagepath4) ] = "Unknown"
+nodedf$session.lag.pagepath5[ is.na(nodedf$session.lag.pagepath5) ] = "Unknown"
+nodedf$state[ is.na(nodedf$state) ] = "Unknown"
+nodedf[] = lapply(nodedf, factor)
+nodedf$time_delta = as.numeric(as.character(nodedf$time_delta))/60
+nodedf$eventid = as.numeric(as.character(nodedf$eventid))
+nodedf$SessionStart = 0
+nodedf$SessionStart[ is.na(nodedf$time_delta) ] = 1
+nodedf$time_delta[ is.na(nodedf$time_delta) ] = 0
+```
+
+
+Partition Node Page Data
+```{r}
+samplesize = floor(0.85 * nrow(nodedf))
+set.seed(42)
+splitindex = sample(seq_len(nrow(nodedf)), size = samplesize)
+train = nodedf[splitindex, ]
+train = train %>% group_by(pagepath) %>% nest() %>% droplevels()
+train = train %>% mutate(data = map(data, ~droplevels(.))) %>% arrange(pagepath)
+test = nodedf[-splitindex, ]
+test = test %>% group_by(pagepath) %>% nest() %>% droplevels()
+test = test %>% mutate(data = map(data, ~droplevels(.))) %>% arrange(pagepath)
+```
+
+
+Logistic Regression Model for Destination Pages
+```{r}
+library(broom)
+nodemodel = function(df) {
+  glm(applied ~ . -	applied - eventid, data = df, family = "binomial", na.action = na.exclude)
+}
+train = train %>% mutate(mod = map(data, nodemodel))
+test$mod = train$mod
+train = train %>%
+  mutate(prediction = map(mod, predict))
+test$mod = train$mod
+train = train %>% mutate(
+  tidy = map2(.x = mod, .y = data,  .f = ~ tidy(.x, data = .y)),
+  glance = map2(.x = mod, .y = data,  .f = ~ glance(.x, data = .y)),
+  prediction = map2(.x = mod, .y = data,  .f = ~ predict(.x, type ="response", data = .y, return_df = TRUE))
+)
+results = test %>% mutate(
+  prediction = map2(.x = mod, .y = data,  .f = ~ predict(.x, type ="response", newdata = .y, return_df = TRUE))
+)
+test = test %>% mutate(
+  tidy = map2(.x = mod, .y = data,  .f = ~ tidy(.x, newdata = .y)),
+  glance = map2(.x = mod, .y = data,  .f = ~ glance(.x, newdata = .y)),
+  augment = map2(.x = mod, .y = data,  .f = ~ augment(.x, newdata = .y))
+)
+results$mod = NULL
+results = unnest(results)
+trainresults = train %>% select(data, prediction) %>% unnest() %>% select(eventid, prediction)
+noderesults = union_all(trainresults, results %>% select(eventid, prediction))
+results$pred = ifelse(results$prediction > .5,  1, 0)
+confusion = table(results$applied,results$pred)
+Accuracy = paste('Accuracy is equal to', sum(diag(confusion))/sum(confusion))
+Accuracy
+confusion
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#####Extra Code
+
+RF Model -- Underperformed vs Logistic Regression
+```{r}
+nodemodel = function(df) {
+  randomForest(factor(applied) ~ ., data = df  ,ntree=20, na.action = na.exclude)
+}
+train = train %>% mutate(mod = map(data, nodemodel))
+train = train %>%
+  mutate(prediction = map(mod, predict))
+test$mod = train$mod
+test$prediction = map2(.x = test$mod, .y = test$data, .f = ~ predict(.x, newdata =.y, return_df = TRUE))
+test$mod = NULL
+train$mod = NULL
+train = unnest(train)
+test = unnest(test)
+confusion = table(test$applied,test$prediction)
+Accuracy = paste('Accuracy is equal to', sum(diag(confusion))/sum(confusion))
+Accuracy
+confusion
+```
+
+
+Variable Importance
+```{r}
+library(ggplot2)
+importance    = importance(rf_model)
+varImportance = data.frame(Variables = row.names(importance), Importance = round(importance[ ,'MeanDecreaseGini'],2))
+rankImportance = varImportance %>% mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+ggplot(rankImportance, aes(x = reorder(Variables, Importance), y = Importance, fill = Importance)) + geom_bar(stat='identity') + geom_text(aes(x = Variables, y = 0.5, label = Rank), hjust=0, vjust=0.55, size = 4, colour = 'red') + labs(x = 'Variables') + coord_flip() + theme_classic()
+```
+
+
